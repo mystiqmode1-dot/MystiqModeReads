@@ -2,7 +2,7 @@ import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { readFileSync, mkdirSync } from 'node:fs';
-import { extname, resolve } from 'node:path';
+import { extname, resolve, sep } from 'node:path';
 mkdirSync('data',{recursive:true});
 const db = new DatabaseSync(process.env.DB_PATH || 'data/reads.sqlite');
 db.exec(`PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, salt TEXT, admin INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER REFERENCES users(id),expires INTEGER); CREATE TABLE IF NOT EXISTS books(id INTEGER PRIMARY KEY,title TEXT,author TEXT,category TEXT,description TEXT,cover TEXT,pages TEXT); CREATE TABLE IF NOT EXISTS progress(user_id INTEGER REFERENCES users(id),book_id INTEGER REFERENCES books(id),page INTEGER,PRIMARY KEY(user_id,book_id));`);
@@ -57,7 +57,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='GET'&&/^\/api\/books\/\d+$/.test(path)){const book=db.prepare('SELECT * FROM books WHERE id=?').get(Number(path.split('/').pop()));if(!book)return json(res,404,{error:'Book not found'});book.pages=JSON.parse(book.pages);book.progress=me?db.prepare('SELECT page FROM progress WHERE user_id=? AND book_id=?').get(me.id,book.id)?.page||0:0;return json(res,200,book);}
  if(req.method==='GET'&&path==='/api/progress')return me?json(res,200,db.prepare('SELECT book_id,page FROM progress WHERE user_id=?').all(me.id)):json(res,401,{error:'Sign in first'});
  if(path.startsWith('/api/'))return json(res,404,{error:'Not found'});
- const file=resolve('public',path==='/'?'index.html':'.'+path);if(!file.startsWith(resolve('public')+'/'))return json(res,403,{error:'Forbidden'});
+ const file=resolve('public',path==='/'?'index.html':'.'+path);if(!file.startsWith(resolve('public')+sep))return json(res,403,{error:'Forbidden'});
  try{const data=readFileSync(file);res.writeHead(200,{'Content-Type':{'.html':'text/html','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'}[extname(file)]||'application/octet-stream','X-Content-Type-Options':'nosniff'});res.end(data);}catch{json(res,404,{error:'Not found'});}
  }catch(err){json(res,400,{error:err.message==='Request too large'?'Upload is too large.':'Could not process this request.'});}
 });
