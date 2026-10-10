@@ -17,7 +17,7 @@ Open port 3000. `npm run dev` watches the server; reload the browser after front
 - Responsive searchable library and category filters, with three original sample books and local SVG cover illustrations.
 - Email/password registration and login, scrypt password hashing, server-side expiring sessions, HttpOnly cookies.
 - Account reading shelf and persisted reading position; guests can read and retain their place on the same browser.
-- Parchment reader with animated page turns, touch swipes, keyboard arrows, chapter navigation, font sizes, and light/sepia/dark modes. The animation is a CSS page rotation, not a physically simulated curl.
+- Parchment reader with animated page turns, touch swipes, keyboard arrows, chapter navigation, font sizes, and light/sepia/dark modes. Page turns reveal the next page underneath a diagonal fold, with a shaded reverse side and moving crease shadow. Reduced-motion preferences skip the animation.
 - The first registered account is the administrator. Administrators can upload UTF-8 `.txt` files or paste text, with title, author, category, and description. Books are paginated and published to the shared library. PDF/EPUB and custom cover imports are not yet implemented.
 - Web manifest, icon, and service worker provide installation support on compatible browsers. Deploy over HTTPS for phone installation. iOS uses Share → Add to Home Screen. This release does not cache books offline.
 

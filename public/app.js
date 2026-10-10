@@ -13,7 +13,45 @@ async function details(id){try{current=await api('books/'+id);view='details';she
 function reader(){view='reader';page=Math.min(current.progress||0,current.pages.length-1);renderReader();saveProgress();}
 function renderReader(){root.innerHTML=`<main class="reader"><div class="reader-top"><div><button data-action="close-reader" aria-label="Close book">←</button><span>${esc(current.title)}</span></div><div><button data-action="contents" aria-label="Table of contents">☷</button><button data-action="settings" aria-label="Reading settings">Aa</button></div></div><div class="reading-area"><article class="paper ${theme}" style="--reader-size:${font}px" aria-label="Book page"><div class="chapter">${esc(current.author)} · ${page+1} / ${current.pages.length}</div><h2>${esc(current.pages[page][0]||current.title)}</h2><div class="text">${esc(current.pages[page][1])}</div><div class="page-number">${page+1}</div></article></div><div class="reader-bottom"><button data-action="prev" ${page===0?'disabled':''}>← Previous</button><span>${page+1} / ${current.pages.length}</span><progress max="${current.pages.length}" value="${page+1}" aria-label="Reading progress"></progress><button data-action="next" ${page===current.pages.length-1?'disabled':''}>Next →</button></div></main>`;
 let x=0,y=0;const paper=document.querySelector('.paper');paper.addEventListener('touchstart',e=>{x=e.changedTouches[0].clientX;y=e.changedTouches[0].clientY;},{passive:true});paper.addEventListener('touchend',e=>{let dx=e.changedTouches[0].clientX-x,dy=e.changedTouches[0].clientY-y;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5)turn(dx<0?1:-1);},{passive:true});}
-function turn(direction){if(turning||page+direction<0||page+direction>=current.pages.length)return;turning=true;document.querySelector('.paper').classList.add(direction>0?'turn-next':'turn-prev');setTimeout(()=>{page+=direction;current.progress=page;renderReader();saveProgress();turning=false;},420);}
+function turn(direction){
+ if(turning||page+direction<0||page+direction>=current.pages.length)return;
+ const destination=page+direction;
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches){page=destination;current.progress=page;renderReader();saveProgress();return;}
+ turning=true;
+ const original=document.querySelector('.paper');
+ const stage=document.createElement('div');stage.className='page-turn-stage';
+ const rect=original.getBoundingClientRect();stage.style.width=rect.width+'px';stage.style.height=rect.height+'px';
+ const makePage=index=>{const node=original.cloneNode(true);node.scrollTop=0;node.querySelector('.chapter').textContent=current.author+' · '+(index+1)+' / '+current.pages.length;node.querySelector('h2').textContent=current.pages[index][0]||current.title;node.querySelector('.text').textContent=current.pages[index][1];node.querySelector('.page-number').textContent=index+1;return node;};
+ const under=makePage(direction>0?destination:page);
+ const front=makePage(direction>0?page:destination);
+ front.classList.add('turning-page');front.setAttribute('aria-hidden','true');
+ const reverse=document.createElement('div');reverse.className='page-reverse '+theme;reverse.setAttribute('aria-hidden','true');
+ const ghost=front.cloneNode(true);ghost.className='reverse-text';reverse.append(ghost);
+ const shadow=document.createElement('div');shadow.className='page-crease';shadow.setAttribute('aria-hidden','true');
+ original.replaceWith(stage);stage.append(under,front,reverse,shadow);
+ document.querySelector('.settings')?.remove();
+ document.querySelectorAll('.reader button').forEach(button=>button.disabled=true);
+ const w=rect.width,h=rect.height,slope=.16;
+ const start=performance.now();
+ function draw(now){
+  if(!stage.isConnected){turning=false;return;}
+  const elapsed=Math.min(1,(now-start)/850);
+  const eased=elapsed*elapsed*(3-2*elapsed);
+  const progress=direction>0?eased:1-eased;
+  const edge=w+slope*h/2+8-progress*(w+slope*h+24);
+  const top=edge-slope*h/2,bottom=edge+slope*h/2;
+  front.style.clipPath=`polygon(0 0, ${top}px 0, ${bottom}px ${h}px, 0 100%)`;
+  reverse.style.clipPath=`polygon(${top}px 0, ${bottom}px ${h}px, ${2*bottom-w}px ${h}px, ${2*top-w}px 0)`;
+  const crease=Math.max(0,w-edge);
+  reverse.style.background=theme==='dark'?`linear-gradient(99deg,#222922 ${edge-crease}px,#444d3d ${edge-24}px,#151b15 ${edge}px)`:`linear-gradient(99deg,#b69a70 ${edge-crease}px,#f7e5bd ${edge-45}px,#fff3d4 ${edge-18}px,#b09165 ${edge}px)`;
+  ghost.style.transform=`translateX(${2*(edge-w)}px) scaleX(-1)`;
+  shadow.style.left=top+'px';shadow.style.transform=`rotate(${-Math.atan(slope)*180/Math.PI}deg)`;
+  shadow.style.opacity=String(Math.sin(progress*Math.PI)*.65);
+  if(elapsed<1)requestAnimationFrame(draw);
+  else{page=destination;current.progress=page;turning=false;renderReader();saveProgress();}
+ }
+ requestAnimationFrame(draw);
+}
 function saveProgress(){if(me)api('progress',{bookId:current.id,page}).catch(e=>toast('Reading progress could not be saved: '+e.message));else localStorage.setItem('progress-'+current.id,page);}
 function panel(kind){const existing=document.querySelector('.settings');if(existing){existing.remove();return;}const div=document.createElement('aside');div.className='settings';div.innerHTML=kind==='contents'?`<h3>Inside this book</h3><ol class="contents">${current.pages.map((p,i)=>`<li><button data-page="${i}" class="${i===page?'selected':''}">${i+1}. ${esc(p[0]||'Page '+(i+1))}</button></li>`).join('')}</ol>`:`<h3>Make yourself comfortable</h3><p class="muted">Page appearance</p><div class="choices">${['light','sepia','dark'].map(t=>`<button data-theme="${t}" class="${theme===t?'selected':''}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div><p class="muted">Text size</p><div class="choices"><button data-font="-2">A−</button><button data-font="2">A+</button></div><p class="muted" style="font-size:12px">Swipe left or right to turn a page. Use the arrow keys on a keyboard.</p>`;document.querySelector('.reader').append(div);}
 function auth(register=false){view='auth';shell(`<section class="form-shell"><div class="eyebrow">Your own reading corner</div><h1>${register?'Begin a new chapter.':'Welcome back.'}</h1><p class="muted">Save your place and build a reading habit.</p><form id="auth-form">${register?'<label>Your name<input name="name" autocomplete="name" maxlength="80" required></label>':''}<label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" minlength="8" maxlength="256" autocomplete="${register?'new-password':'current-password'}" required></label><p class="error" role="alert"></p><button class="primary">${register?'Create account':'Sign in'} →</button></form><p class="form-switch">${register?'Already a reader?':'New here?'} <button data-action="${register?'login':'register'}">${register?'Sign in':'Create an account'}</button></p>${register?'<p class="muted" style="font-size:11px;margin-top:20px">For this initial development version, the first registered account becomes the library administrator.</p>':''}</section>`);document.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{me=await api(register?'register':'login',Object.fromEntries(new FormData(e.target)));toast(register?'Welcome to your new reading corner.':'Welcome back.');home();}catch(err){document.querySelector('.error').textContent=err.message;button.disabled=false;}};}
